@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:camel="http://camel.apache.org/schema/spring"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans.xsd http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd">
+
+    <bean id="amqConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
+        <property name="brokerURL" value="tcp://localhost:61616"/>
+    </bean>
+
+    <bean id="pooledConnectionFactory"
+          class="org.apache.activemq.pool.PooledConnectionFactory"
+          destroy-method="stop">
+        <property name="maxConnections" value="10"/>
+        <property name="maximumActiveSessionPerConnection" value="10000"/>
+        <property name="connectionFactory" ref="amqConnectionFactory"/>
+        <property name="timeBetweenExpirationCheckMillis" value="10000"/>
+        <property name="expiryTimeout" value="60000"/>
+        <property name="reconnectOnException" value="true"/>
+    </bean>
+
+    <bean id="activemq" class="org.apache.activemq.camel.component.ActiveMQComponent">
+        <property name="configuration">
+            <bean class="org.apache.camel.component.jms.JmsConfiguration">
+                <property name="connectionFactory" ref="pooledConnectionFactory"/>
+            </bean>
+        </property>
+    </bean>
+
+    <bean id="sqs" class="org.apache.camel.component.aws.sqs.SqsComponent">
+        <property name="region" value="US_EAST_1"/>
+        <property name="accessKey" value=""/>
+        <property name="secretKey" value=""/>
+    </bean>
+
+    <bean id="deadLetterChannelBuilder" class="org.apache.camel.builder.DeadLetterChannelBuilder">
+        <property name="deadLetterUri" value="direct:deadLetterProcessor"/>
+        <property name="useOriginalMessage" value="true"/>
+        <property name="logger">
+            <bean class="org.apache.camel.util.CamelLogger">
+                <property name="logName" value="deadletter"/>
+            </bean>
+        </property>
+    </bean>
+
+
+    <bean id="consumer" class="com.crew.camel.Consumer"/>
+
+    <bean id="producer" class="com.crew.camel.Producer">
+        <constructor-arg name="camelContext" ref="camelContext"/>
+        <constructor-arg name="objectMapper">
+            <bean class="com.fasterxml.jackson.databind.ObjectMapper"/>
+        </constructor-arg>
+    </bean>
+
+    <camel:endpoint id="DLQ" uri="activemq:queue:DLQ"/>
+    <camel:endpoint id="postScheduleCreate" uri="activemq:queue:post-schedule-create"/>
+    <camel:endpoint id="sendCreateNotification" uri="activemq:queue:send-create-notification"/>
+    <camel:endpoint id="postScheduleUpdate" uri="activemq:queue:post-schedule-update"/>
+    <camel:endpoint id="postScheduleDelete" uri="sqs://post-schedule-delete"/>
+    <camel:endpoint id="scheduleEvent" uri="direct:schedule-event"/>
+    <camel:endpoint id="asyncScheduleEvent" uri="seda:async-schedule-event"/>
+    
+    <camel:camelContext id="camelContext"
+                        autoStartup="true"
+                        depends-on="activemq,sqs"
+                        errorHandlerRef= "deadLetterChannelBuilder">
+
+
+        <camel:route id="deadLetterRoute">
+            <camel:from uri="direct:deadLetterProcessor"/>
+            <camel:to ref="DLQ"/>
+        </camel:route>
+        
+        <camel:route id="scheduleEventRoute">
+            <camel:from ref="scheduleEvent"/>
+            <camel:from ref="asyncScheduleEvent"/>
+            <camel:choice>
+                <camel:when>
+                    <camel:simple>${in.header.event} == 'CREATE'</camel:simple>
+                    <camel:to ref="postScheduleCreate"/>
+                </camel:when>
+                <camel:when>
+                    <camel:simple>${in.header.event} == 'UPDATE'</camel:simple>
+                    <camel:to ref="postScheduleUpdate"/>
+                </camel:when>
+                <camel:when>
+                    <camel:simple>${in.header.event} == 'DELETE'</camel:simple>
+                    <camel:to ref="postScheduleDelete"/>
+                </camel:when>
+            </camel:choice>
+        </camel:route>
+
+        <camel:route>
+            <camel:from ref="postScheduleCreate"/>
+            <camel:bean ref="consumer" method="enrich"/>
+            <camel:to ref="sendCreateNotification"/>
+        </camel:route>
+
+
+    </camel:camelContext>
+
+</beans>
