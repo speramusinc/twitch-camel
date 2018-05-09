@@ -58,7 +58,9 @@
     <camel:endpoint id="postScheduleCreate" uri="activemq:queue:post-schedule-create"/>
     <camel:endpoint id="sendCreateNotification" uri="activemq:queue:send-create-notification"/>
     <camel:endpoint id="postScheduleUpdate" uri="activemq:queue:post-schedule-update"/>
+
     <camel:endpoint id="postScheduleDelete" uri="sqs://post-schedule-delete"/>
+
     <camel:endpoint id="scheduleEvent" uri="direct:schedule-event"/>
     <camel:endpoint id="asyncScheduleEvent" uri="seda:async-schedule-event"/>
     

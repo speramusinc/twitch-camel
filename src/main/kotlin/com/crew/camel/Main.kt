@@ -90,17 +90,17 @@ class Producer(private val camelContext: CamelContext,
 
 class Consumer {
     @Consume(ref ="sendCreateNotification")
-    fun processScheduleCreate(@Body schedule: Schedule, @Header("event") event: EventType) {
+    fun processScheduleCreate(@Body schedule: String, @Header("event") event: EventType) {
         println("Sending out that notification for a new schedule. $schedule")
     }
 
     @Consume(ref ="postScheduleUpdate")
-    fun processScheduleUpdate(@Body schedule: Schedule, @Header("event") event: EventType) {
+    fun processScheduleUpdate(@Body schedule: String, @Header("event") event: EventType) {
         println("The schedule has been updated: $schedule")
     }
 
     @Consume(ref ="postScheduleDelete")
-    fun processScheduleDelete(@Body schedule: Schedule, @Header("event") event: EventType) {
+    fun processScheduleDelete(@Body schedule: String, @Header("event") event: EventType) {
         println("Bummer someone deleted the schedule. $schedule")
     }
 
